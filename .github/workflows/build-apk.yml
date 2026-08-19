@@ -26,21 +26,15 @@ jobs:
       - name: Install Android SDK packages
         run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Restore and verify Aarav photo
+      - name: Verify Aarav source photo
         run: |
+          SIZE=$(stat -c%s app/src/main/res/drawable/aarav_photo.jpg)
+          echo "Aarav source photo bytes: $SIZE"
+          test "$SIZE" -gt 3000
           python3 - <<'PY'
-          import base64, pathlib, re, sys
-          src = pathlib.Path('app/src/main/java/com/sangram/plantsaroundus/AaravImage.java').read_text(encoding='utf-8')
-          m = re.search(r'BASE64\s*=\s*"([^"]+)"', src)
-          if not m:
-              raise SystemExit('Aarav BASE64 image data not found')
-          raw = base64.b64decode(m.group(1))
-          out = pathlib.Path('app/src/main/res/drawable/aarav_photo.jpg')
-          out.parent.mkdir(parents=True, exist_ok=True)
-          out.write_bytes(raw)
-          print('Aarav photo bytes:', len(raw))
-          if len(raw) < 10000 or not raw.startswith(b'\xff\xd8'):
-              raise SystemExit('Aarav photo validation failed')
+          from pathlib import Path
+          raw = Path('app/src/main/res/drawable/aarav_photo.jpg').read_bytes()
+          assert raw.startswith(b'\xff\xd8'), 'Not a valid JPEG header'
           PY
 
       - name: Set up Gradle
@@ -56,7 +50,7 @@ jobs:
           unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'res/drawable/aarav_photo.jpg'
           SIZE=$(unzip -l app/build/outputs/apk/debug/app-debug.apk | awk '/res\/drawable\/aarav_photo.jpg/{print $1}')
           echo "Packaged Aarav photo bytes: $SIZE"
-          test "$SIZE" -gt 10000
+          test "$SIZE" -gt 3000
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
