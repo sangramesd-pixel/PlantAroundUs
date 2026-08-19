@@ -26,6 +26,23 @@ jobs:
       - name: Install Android SDK packages
         run: yes | sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Restore and verify Aarav photo
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib, re, sys
+          src = pathlib.Path('app/src/main/java/com/sangram/plantsaroundus/AaravImage.java').read_text(encoding='utf-8')
+          m = re.search(r'BASE64\s*=\s*"([^"]+)"', src)
+          if not m:
+              raise SystemExit('Aarav BASE64 image data not found')
+          raw = base64.b64decode(m.group(1))
+          out = pathlib.Path('app/src/main/res/drawable/aarav_photo.jpg')
+          out.parent.mkdir(parents=True, exist_ok=True)
+          out.write_bytes(raw)
+          print('Aarav photo bytes:', len(raw))
+          if len(raw) < 10000 or not raw.startswith(b'\xff\xd8'):
+              raise SystemExit('Aarav photo validation failed')
+          PY
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
@@ -33,6 +50,13 @@ jobs:
 
       - name: Build debug APK
         run: gradle :app:assembleDebug --stacktrace
+
+      - name: Verify photo inside APK
+        run: |
+          unzip -l app/build/outputs/apk/debug/app-debug.apk | grep 'res/drawable/aarav_photo.jpg'
+          SIZE=$(unzip -l app/build/outputs/apk/debug/app-debug.apk | awk '/res\/drawable\/aarav_photo.jpg/{print $1}')
+          echo "Packaged Aarav photo bytes: $SIZE"
+          test "$SIZE" -gt 10000
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
